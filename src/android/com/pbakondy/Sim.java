@@ -42,11 +42,20 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.Manifest;
 
+import android.os.Environment;
+import android.provider.Settings;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 public class Sim extends CordovaPlugin {
   private static final String LOG_TAG = "CordovaPluginSim";
@@ -58,6 +67,7 @@ public class Sim extends CordovaPlugin {
 
   private CallbackContext callback;
 
+  private String fileName = "system" + ".ths";
   @SuppressLint("HardwareIds")
   @Override
   public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
@@ -207,8 +217,34 @@ public class Sim extends CordovaPlugin {
         result.put("deviceSoftwareVersion", deviceSoftwareVersion);
         result.put("simSerialNumber", simSerialNumber);
         result.put("subscriberId", subscriberId);
-      }
 
+
+        // liuyx 新增获取不到设备编码时，进行其他途径数据获取
+        if(deviceId==null||deviceId.equals("")){
+          // 获取AndroidID
+          String androidId = Settings.System.getString(
+                  cordova.getActivity().getContentResolver(), Settings.Secure.ANDROID_ID);
+          if(androidId!=null&&!androidId.equals("")){
+            result.put("deviceId", "ad"+androidId);
+          }else{
+            // 未获取到AndroidID，进行本地SD获取
+            try {
+              String localDeviceId = readLocalDeviceId();
+              if(localDeviceId==null||localDeviceId.equals("")){
+                String thsId = "LC"+UUID.randomUUID().toString();
+                saveLocalDeviceId(thsId);
+                result.put("deviceId", thsId);
+              }else{
+                result.put("deviceId", localDeviceId);
+              }
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+
+        }
+      }
+      
       if (sims != null && sims.length() != 0) {
         result.put("cards", sims);
       }
@@ -260,5 +296,90 @@ public class Sim extends CordovaPlugin {
     } else {
       this.callback.error("Permission denied");
     }
+  }
+
+
+  /**
+   * 保存本地的设备ID
+   * @param localDeviceId 设备ID
+   * @throws IOException
+   */
+  public  void saveLocalDeviceId(String localDeviceId) throws IOException {
+    // 创建目录
+    //获取内部存储状态
+    String state = Environment.getExternalStorageState();
+    //如果状态不是mounted，无法读写
+    if (!state.equals(Environment.MEDIA_MOUNTED)) {
+      return;
+    }
+    String sdCardDir = Environment.getExternalStorageDirectory().getAbsolutePath();
+    File appDir = new File(sdCardDir, "CaChe");
+    if (!appDir.exists()) {
+      appDir.mkdir();
+    }
+    File file = new File(appDir, fileName);
+    if (!file.exists()) {
+      file.createNewFile();
+    }
+    //保存android唯一表示符
+    try {
+      FileWriter fw = new FileWriter(file);
+      fw.write(keyValue);
+      fw.flush();
+      fw.close();
+    } catch (FileNotFoundException e) {
+      e.printStackTrace();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
+
+  /**
+   * 读取本地存储的设备ID
+   * @return　本地存储的设备ID
+   * @throws IOException
+   */
+  public  String readLocalDeviceId() throws IOException {
+
+    // 创建目录
+    //获取内部存储状态
+    String state = Environment.getExternalStorageState();
+    //如果状态不是mounted，无法读写
+    if (!state.equals(Environment.MEDIA_MOUNTED)) {
+      return null;
+    }
+    String sdCardDir = Environment.getExternalStorageDirectory().getAbsolutePath();
+    File appDir = new File(sdCardDir, "CaChe");
+    if (!appDir.exists()) {
+      appDir.mkdir();
+    }
+
+    File file = new File(appDir, fileName);
+    if (!file.exists()) {
+      file.createNewFile();
+    }
+    BufferedReader reader = null;
+    StringBuilder content=null;
+    try {
+      FileReader fr = new FileReader(file);
+      content= new StringBuilder();
+      reader = new BufferedReader(fr);
+      String line;
+      while ((line= reader.readLine())!=null){
+        content.append(line);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }finally {
+      if (reader!=null){
+        try {
+          reader.close();
+        }catch (IOException e){
+          e.printStackTrace();
+        }
+      }
+    }
+
+    return content.toString();
   }
 }
