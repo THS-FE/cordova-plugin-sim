@@ -324,7 +324,7 @@ public class Sim extends CordovaPlugin {
     //保存android唯一表示符
     try {
       FileWriter fw = new FileWriter(file);
-      fw.write(keyValue);
+      fw.write(localDeviceId);
       fw.flush();
       fw.close();
     } catch (FileNotFoundException e) {
